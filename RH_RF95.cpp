@@ -21,6 +21,10 @@ PROGMEM static const RH_RF95::ModemConfig MODEM_CONFIG_TABLE[] =
     { 0x48,   0x94,    0x04}, // Bw31_25Cr48Sf512, AGC enabled
     { 0x78,   0xc4,    0x0c}, // Bw125Cr48Sf4096, AGC enabled
     { 0x72,   0xb4,    0x04}, // Bw125Cr45Sf2048, AGC enabled
+    { 0x78,   0x94,    0x04}, // Bw125Cr48Sf512,  AGC enabled (SF 9)
+    { 0x78,   0xa4,    0x04}, // Bw125Cr48Sf1024, AGC enabled (SF 10)
+    { 0x76,   0xa4,    0x04}, // Bw125Cr47Sf1024, AGC enabled (SF 10)
+    { 0x74,   0xa4,    0x04}, // Bw125Cr46Sf1024, AGC enabled (SF 10)
     
 };
 
@@ -118,13 +122,13 @@ bool RH_RF95::init()
 
     // Set up default configuration
     // No Sync Words in LORA mode.
-    setModemConfig(Bw125Cr45Sf128); // Radio default
+    setModemConfig(Bw125Cr48Sf512); // Radio default
 //    setModemConfig(Bw125Cr48Sf4096); // slow and reliable?
-    setPreambleLength(8); // Default is 8
+    setPreambleLength(16); // Default is 8
     // An innocuous ISM frequency, same as RF22's
-    setFrequency(434.0);
+    setFrequency(868.3);
     // Lowish power
-    setTxPower(13);
+    setTxPower(20);
 
     return true;
 }
