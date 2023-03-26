@@ -1,7 +1,7 @@
 // RH_RF95.cpp
 //
 // Copyright (C) 2011 Mike McCauley
-// $Id: RH_RF95.cpp,v 1.27 2020/07/05 08:52:21 mikem Exp $
+// $Id: RH_RF95.cpp,v 1.28 2023/03/26 11:45:39 ut2uh Exp $
 
 #include <RH_RF95.h>
 
@@ -33,12 +33,14 @@ PROGMEM static const RH_RF95::ModemConfig MODEM_CONFIG_TABLE[] =
 
 };
 
-RH_RF95::RH_RF95(uint8_t slaveSelectPin, uint8_t interruptPin, RHGenericSPI& spi)
+RH_RF95::RH_RF95(uint8_t slaveSelectPin, uint8_t dio0Pin, uint8_t chanHopPin, bool useFH, RHGenericSPI& spi)
     :
     RHSPIDriver(slaveSelectPin, spi),
     _rxBufValid(0)
 {
-    _interruptPin = interruptPin;
+    _chanHopPin = chanHopPin;
+    _useFH = useFH;
+    _dio0Pin = dio0Pin;
     _myInterruptIndex = 0xff; // Not allocated yet
     _enableCRC = true;
     _useRFO = false;
@@ -47,31 +49,41 @@ RH_RF95::RH_RF95(uint8_t slaveSelectPin, uint8_t interruptPin, RHGenericSPI& spi
 bool RH_RF95::init()
 {
     if (!RHSPIDriver::init())
-	return false;
+	    return false;
 
 #ifdef RH_USE_MUTEX
     if (RH_MUTEX_INIT(lock) != 0)
     { 
-    	Serial.println("\n mutex init has failed\n");
+    	//Serial.println("\n mutex init has failed\n");
     	return false;
     }
 #endif
     // For some subclasses (eg RH_L0RA) we dont want to set up interrupt
-    int interruptNumber = NOT_AN_INTERRUPT;
-    if (_interruptPin != RH_INVALID_PIN)
+    int dio0intNumber = NOT_AN_INTERRUPT;
+    if (_dio0Pin != RH_INVALID_PIN)
     {
-	// Determine the interrupt number that corresponds to the interruptPin
-	interruptNumber = digitalPinToInterrupt(_interruptPin);
-	if (interruptNumber == NOT_AN_INTERRUPT)
-	    return false;
+        // Determine the interrupt number that corresponds to the dio0Pin
+        dio0intNumber = digitalPinToInterrupt(_dio0Pin);
+        if (dio0intNumber == NOT_AN_INTERRUPT)
+            return false;
 #ifdef RH_ATTACHINTERRUPT_TAKES_PIN_NUMBER
-	interruptNumber = _interruptPin;
+	dio0intNumber = _dio0Pin;
 #endif
 
     // Tell the low level SPI interface we will use SPI within this interrupt
-	spiUsingInterrupt(interruptNumber);
+	spiUsingInterrupt(dio0intNumber);
     }
-
+    int chanHopIntNumber = NOT_AN_INTERRUPT;
+    if (_chanHopPin != RH_INVALID_PIN)
+    {
+        // Determine the interrupt number that corresponds to the chanHopPin
+        chanHopIntNumber = digitalPinToInterrupt(_chanHopPin);
+        if (chanHopIntNumber == NOT_AN_INTERRUPT) 
+            return false;
+#ifdef RH_ATTACHINTERRUPT_TAKES_PIN_NUMBER
+        chanHopIntNumber = _chanHopPin;
+#endif
+    }
     // No way to check the device type :-(
     
     // Set sleep mode, so we can also set LORA mode:
@@ -81,41 +93,46 @@ bool RH_RF95::init()
     if (spiRead(RH_RF95_REG_01_OP_MODE) != (RH_RF95_MODE_SLEEP | RH_RF95_LONG_RANGE_MODE))
     {
 //	Serial.println(spiRead(RH_RF95_REG_01_OP_MODE), HEX);
-	return false; // No device present?
+        return false; // No device present?
     }
 
 
-    if (_interruptPin != RH_INVALID_PIN)
+    if (_dio0Pin != RH_INVALID_PIN)
     {
-	// Add by Adrien van den Bossche <vandenbo@univ-tlse2.fr> for Teensy
-	// ARM M4 requires the below. else pin interrupt doesn't work properly.
-	// On all other platforms, its innocuous, belt and braces
-	pinMode(_interruptPin, INPUT); 
+        // Add by Adrien van den Bossche <vandenbo@univ-tlse2.fr> for Teensy
+        // ARM M4 requires the below. else pin interrupt doesn't work properly.
+        // On all other platforms, its innocuous, belt and braces
+        pinMode(_dio0Pin, INPUT);
+        if (_useFH) pinMode(_chanHopPin, INPUT);
 	
-	// Set up interrupt handler
-	// Since there are a limited number of interrupt glue functions isr*() available,
-	// we can only support a limited number of devices simultaneously
-	// ON some devices, notably most Arduinos, the interrupt pin passed in is actually the 
-	// interrupt number. You have to figure out the interruptnumber-to-interruptpin mapping
-	// yourself based on knwledge of what Arduino board you are running on.
-	if (_myInterruptIndex == 0xff)
-	{
-	    // First run, no interrupt allocated yet
-	    if (_interruptCount <= RH_RF95_NUM_INTERRUPTS)
-		_myInterruptIndex = _interruptCount++;
-	    else
-		return false; // Too many devices, not enough interrupt vectors
-	}
-	_deviceForInterrupt[_myInterruptIndex] = this;
+        // Set up interrupt handler
+        // Since there are a limited number of interrupt glue functions isr*() available,
+        // we can only support a limited number of devices simultaneously
+        // ON some devices, notably most Arduinos, the interrupt pin passed in is actually the 
+        // interrupt number. You have to figure out the interruptnumber-to-interruptpin mapping
+        // yourself based on knwledge of what Arduino board you are running on.
+        if (_myInterruptIndex == 0xff)
+        {
+            // First run, no interrupt allocated yet
+            if (_interruptCount <= RH_RF95_NUM_INTERRUPTS)
+            _myInterruptIndex = _interruptCount++;
+            else
+            return false; // Too many devices, not enough interrupt vectors
+        }
+        _deviceForInterrupt[_myInterruptIndex] = this;
 	
-	if (_myInterruptIndex == 0)
-	    attachInterrupt(interruptNumber, isr0, RISING);
-	else if (_myInterruptIndex == 1)
-	    attachInterrupt(interruptNumber, isr1, RISING);
-	else if (_myInterruptIndex == 2)
-	    attachInterrupt(interruptNumber, isr2, RISING);
-	else
-	    return false; // Too many devices, not enough interrupt vectors
+        if (_myInterruptIndex == 0) {
+            attachInterrupt(dio0intNumber, isr0, RISING);
+            if (_useFH) attachInterrupt(chanHopIntNumber, isr0, RISING);
+        } else if (_myInterruptIndex == 1) {
+            attachInterrupt(dio0intNumber, isr1, RISING);
+            if (_useFH) attachInterrupt(chanHopIntNumber, isr1, RISING);
+        } else if (_myInterruptIndex == 2) {
+            attachInterrupt(dio0intNumber, isr2, RISING);
+            if (_useFH) attachInterrupt(chanHopIntNumber, isr2, RISING);
+        } else {
+            return false; // Too many devices, not enough interrupt vectors
+        }
     }
     
     // Set up FIFO
@@ -175,64 +192,67 @@ void RH_RF95::handleInterrupt()
     // at the _beginning_ of the ISR.  If any interrupts occur while handling the ISR, the signal will remain asserted and
     // our ISR will be reinvoked to handle that case)
     // kevinh: turn this off until root cause is known, because it can cause missed interrupts!
+    // ut2uh: turned on once at the begining to enable both FHSS and single freq operation
     // spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
 
-    // error if:
-    // timeout
-    // bad CRC
-    // CRC is required but it is not present
-    if (_mode == RHModeRx
+    if ( _useFH && (irq_flags & RH_RF95_FHSS_CHANGE_CHANNEL) ) {
+        hop_channel &= 0b00111111;
+        setChanFreq(hop_channel);
+    } else if (_mode == RHModeRx
 	&& (   (irq_flags & (RH_RF95_RX_TIMEOUT | RH_RF95_PAYLOAD_CRC_ERROR))
 	    || (_enableCRC && !(hop_channel & RH_RF95_RX_PAYLOAD_CRC_IS_ON)) ))
-//    if (_mode == RHModeRx && irq_flags & (RH_RF95_RX_TIMEOUT | RH_RF95_PAYLOAD_CRC_ERROR))
     {
-//	Serial.println("E");
-	_rxBad++;
+        // error if:
+        // timeout
+        // bad CRC
+        // CRC is required but it is not present
+        // Serial.println("E");
+	    _rxBad++;
         clearRxBuf();
     }
     // It is possible to get RX_DONE and CRC_ERROR and VALID_HEADER all at once
     // so this must be an else
     else if (_mode == RHModeRx && irq_flags & RH_RF95_RX_DONE)
     {
-	// Packet received, no CRC error
-//	Serial.println("R");
-	// Have received a packet
-	uint8_t len = spiRead(RH_RF95_REG_13_RX_NB_BYTES);
+        // Packet received, no CRC error
+    //	Serial.println("R");
+        // Have received a packet
+        uint8_t len = spiRead(RH_RF95_REG_13_RX_NB_BYTES);
 
-	// Reset the fifo read ptr to the beginning of the packet
-	spiWrite(RH_RF95_REG_0D_FIFO_ADDR_PTR, spiRead(RH_RF95_REG_10_FIFO_RX_CURRENT_ADDR));
-	spiBurstRead(RH_RF95_REG_00_FIFO, _buf, len);
-	_bufLen = len;
+        // Reset the fifo read ptr to the beginning of the packet
+        spiWrite(RH_RF95_REG_0D_FIFO_ADDR_PTR, spiRead(RH_RF95_REG_10_FIFO_RX_CURRENT_ADDR));
+        spiBurstRead(RH_RF95_REG_00_FIFO, _buf, len);
+        _bufLen = len;
 
-	// Remember the last signal to noise ratio, LORA mode
-	// Per page 111, SX1276/77/78/79 datasheet
-	_lastSNR = (int8_t)spiRead(RH_RF95_REG_19_PKT_SNR_VALUE) / 4;
+        // Remember the last signal to noise ratio, LORA mode
+        // Per page 111, SX1276/77/78/79 datasheet
+        _lastSNR = (int8_t)spiRead(RH_RF95_REG_19_PKT_SNR_VALUE) / 4;
 
-	// Remember the RSSI of this packet, LORA mode
-	// this is according to the doc, but is it really correct?
-	// weakest receiveable signals are reported RSSI at about -66
-	_lastRssi = spiRead(RH_RF95_REG_1A_PKT_RSSI_VALUE);
-	// Adjust the RSSI, datasheet page 87
-	if (_lastSNR < 0)
-	    _lastRssi = _lastRssi + _lastSNR;
-	else
-	    _lastRssi = (int)_lastRssi * 16 / 15;
-	if (_usingHFport)
-	    _lastRssi -= 157;
-	else
-	    _lastRssi -= 164;
-	    
-	// We have received a message.
-	validateRxBuf(); 
-	if (_rxBufValid)
-	    setModeIdle(); // Got one 
-    }
-    else if (_mode == RHModeTx && irq_flags & RH_RF95_TX_DONE)
-    {
-//	Serial.println("T");
-	_txGood++;
-	setModeIdle();
+        // Remember the RSSI of this packet, LORA mode
+        // this is according to the doc, but is it really correct?
+        // weakest receiveable signals are reported RSSI at about -66
+        _lastRssi = spiRead(RH_RF95_REG_1A_PKT_RSSI_VALUE);
+        // Adjust the RSSI, datasheet page 87
+        if (_lastSNR < 0)
+            _lastRssi = _lastRssi + _lastSNR;
+        else
+            _lastRssi = (int)_lastRssi * 16 / 15;
+        if (_usingHFport)
+            _lastRssi -= 157;
+        else
+            _lastRssi -= 164;
+            
+        // We have received a message.
+        validateRxBuf(); 
+        if (_rxBufValid)
+            setModeIdle(); // Got one 
+        }
+        else if (_mode == RHModeTx && irq_flags & RH_RF95_TX_DONE)
+        {
+    //	Serial.println("T");
+        _txGood++;
+        setModeIdle();
     }
     else if (_mode == RHModeCad && irq_flags & RH_RF95_CAD_DONE)
     {
@@ -247,8 +267,9 @@ void RH_RF95::handleInterrupt()
 	
     // Sigh: on some processors, for some unknown reason, doing this only once does not actually
     // clear the radio's interrupt flag. So we do it twice. Why?
-    spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
-    spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
+    // ut2uh: FHSS does not work if IRQ clears here
+    // spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
+    // spiWrite(RH_RF95_REG_12_IRQ_FLAGS, 0xff); // Clear all IRQ flags
     RH_MUTEX_UNLOCK(lock); 
 }
 
@@ -383,6 +404,7 @@ uint8_t RH_RF95::maxMessageLength()
 
 bool RH_RF95::setFrequency(float centre)
 {
+    _centreFreq = centre;
     // Frf = FRF / FSTEP
     uint32_t frf = (centre * 1000000.0) / RH_RF95_FSTEP;
     spiWrite(RH_RF95_REG_06_FRF_MSB, (frf >> 16) & 0xff);
@@ -390,6 +412,94 @@ bool RH_RF95::setFrequency(float centre)
     spiWrite(RH_RF95_REG_08_FRF_LSB, frf & 0xff);
     _usingHFport = (centre >= 779.0);
 
+    return true;
+}
+
+bool RH_RF95::setChanFreq(uint8_t chan)
+{
+    uint32_t frf = _freqList[chan];
+    spiWrite(RH_RF95_REG_06_FRF_MSB, (frf >> 16) & 0xff);
+    spiWrite(RH_RF95_REG_07_FRF_MID, (frf >> 8) & 0xff);
+    spiWrite(RH_RF95_REG_08_FRF_LSB, frf & 0xff);
+    return true;
+}
+
+void RH_RF95::setFHlist(float centre, float bw, const uint8_t *hopChan)
+{
+    _centreFreq = centre;
+    float step = bw / 16;
+    float halfSbw;
+    // top 4 bits of reg 1D control bandwidth
+    uint8_t sbw = spiRead(RH_RF95_REG_1D_MODEM_CONFIG1) & RH_RF95_BW;
+    switch(sbw) {
+        case 0x00:
+            halfSbw = 0.0039;   // 7800 / 2;
+            break;
+        case 0x10:
+            halfSbw = 0.0052;   // 10400 / 2;
+            break;
+        case 0x20:
+            halfSbw = 0.0078;   // 15600 / 2;
+            break;
+        case 0x30:
+            halfSbw = 0.0104;   // 20800 / 2;
+            break;
+        case 0x40:
+            halfSbw = 0.015625; // 31250 / 2;
+            break;
+        case 0x50:
+            halfSbw = 0.02085;  // 41700 / 2;
+            break;
+        case 0x60:
+            halfSbw = 0.03125;  // 62500 / 2;
+            break;
+        case 0x70:
+            halfSbw = 0.0625;   // 125000 / 2;
+            break;
+        case 0x80:
+            halfSbw = 0.125;    // 250000 / 2;
+            break;
+        case 0x90:
+            halfSbw = 0.25;     // 500000 / 2;
+            break;
+    }
+    float freqLow = centre - bw / 2 + halfSbw;
+    _usingHFport = (freqLow >= 779.0);
+    //uint32_t fStart = (freqLow * 256) / 15625;
+    
+    // check if low data rate bit should be set or cleared
+    // setLowDatarate();
+    for (uint8_t i = 0; i < RH_RF95_MAX_FH_CHANNEL; i++) {
+        float chanFreq = freqLow + hopChan[i] * step;
+        _freqList[i] = (chanFreq * 1000000.0) / RH_RF95_FSTEP;
+        // Serial.print(i, HEX);
+        // Serial.print(" ");
+        // Serial.print(hopChan[i], HEX);
+        // Serial.print(" ");
+        // Serial.print(chanFreq, DEC);
+        // Serial.print(" ");
+        // Serial.println(_freqList[i], HEX);
+    }
+    setChanFreq(0);
+}
+
+bool RH_RF95::setFH(uint8_t symbolPeriod /* = 2 */, bool useDio2 /* = true */)
+{
+    /// Symbol duration: Tsym = 2^SF / BW
+    /// For example, if SF = 10, BW = 125kHz, then Tsym = 8.192ms
+    /// Given FCC permits a 400ms max dwell time per channel, we must hop at least every 48 symbols
+    /// hopPeriod (dwell time on each freq) = symbolPeriod * Tsym
+    /// With the dafault symbolPeriod, the chip would hop freq for every 2 symbols.
+    if (symbolPeriod == 0){
+        _useFH = false;    /// Hopping feature is turned off
+        setFrequency(_centreFreq);
+    }
+    spiWrite(RH_RF95_REG_24_HOP_PERIOD, symbolPeriod); /// hopPeriod = 2 * 8.192ms
+    uint8_t hopChannelNow = spiRead(RH_RF95_REG_1C_HOP_CHANNEL) & 0b00111111;
+    //Serial.print("hopChannelNow  "); Serial.println(hopChannelNow);
+    _dioFH = 0x04;      //0b01 in bits 3-2
+    if (!useDio2)
+        _dioFH = 0x10;  //0b01 in bits 5-4
     return true;
 }
 
@@ -420,7 +530,7 @@ void RH_RF95::setModeRx()
     {
 	modeWillChange(RHModeRx);
 	spiWrite(RH_RF95_REG_01_OP_MODE, RH_RF95_MODE_RXCONTINUOUS);
-	spiWrite(RH_RF95_REG_40_DIO_MAPPING1, 0x00); // Interrupt on RxDone
+	spiWrite(RH_RF95_REG_40_DIO_MAPPING1, _useFH ? 0x00 | _dioFH : 0x00); // Interrupt on RxDone and FHCChange if FHSS enabled
 	_mode = RHModeRx;
     }
 }
@@ -431,7 +541,7 @@ void RH_RF95::setModeTx()
     {
 	modeWillChange(RHModeTx);
 	spiWrite(RH_RF95_REG_01_OP_MODE, RH_RF95_MODE_TX);
-	spiWrite(RH_RF95_REG_40_DIO_MAPPING1, 0x40); // Interrupt on TxDone
+	spiWrite(RH_RF95_REG_40_DIO_MAPPING1, _useFH ? 0x40 | _dioFH : 0x40); // Interrupt on TxDone and FHCChange if FHSS enabled
 	_mode = RHModeTx;
     }
 }

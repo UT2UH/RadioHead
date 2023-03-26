@@ -20,7 +20,7 @@
 // Author: Mike McCauley (mikem@airspayce.com)
 // RHF76-052, S76G, LGT92 fork - UT2UH
 // Copyright (C) 2020 Mike McCauley
-// $Id: RH_L0RA.h,v 1.2 2021/12/16 23:39:39 mikem Exp $
+// $Id: RH_L0RA.h,v 1.3 2023/03/26 11:45:39 ut2uh Exp $
 // 
 #ifndef RH_L0RA_h
 #define RH_L0RA_h
@@ -224,7 +224,8 @@ class RH_L0RA : public RH_RF95
 {
 public:
     /// Constructor
-    RH_L0RA();
+    /// \param useFH Enables FHSS mode
+    RH_L0RA(bool useFH = false);
 
     /// Initialise the Driver transport hardware and software. Leaves the radio in idle mode,
     /// with default configuration of: 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
@@ -257,6 +258,9 @@ private:
 
     /// Pointer to the one and only instance permitted, for interrupt linkage
     static RH_L0RA* _thisDevice;
+
+    /// True if the frequency hopping is not used
+    bool _useFH;
 
 };
 

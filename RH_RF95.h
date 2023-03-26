@@ -6,7 +6,7 @@
 //
 // Author: Mike McCauley (mikem@airspayce.com)
 // Copyright (C) 2014 Mike McCauley
-// $Id: RH_RF95.h,v 1.26 2020/06/15 23:39:39 mikem Exp $
+// $Id: RH_RF95.h,v 1.28 2023/03/26 11:45:39 ut2uh Exp $
 // 
 
 #ifndef RH_RF95_h
@@ -41,6 +41,9 @@
 
 // The Frequency Synthesizer step = RH_RF95_FXOSC / 2^^19
 #define RH_RF95_FSTEP  (RH_RF95_FXOSC / 524288)
+
+// The number of frequency hopping channels used, up to 64
+#define RH_RF95_MAX_FH_CHANNEL 16
 
 
 // Register names (LoRa Mode, from table 85)
@@ -622,7 +625,10 @@ public:
     /// accessing it. Defaults to the normal SS pin for your Arduino (D10 for Diecimila, Uno etc, D53 for Mega, D10 for Maple)
     /// \param[in] interruptPin The interrupt Pin number that is connected to the RFM DIO0 interrupt line. 
     /// Defaults to pin 2, as required by Anarduino MinWirelessLoRa module.
+    /// \param[in] chanHopIntPin The interrupt Pin number that is connected to the RFM DIO1/DIO2 interrupt line for FHSS. 
+    /// Defaults to RH_INVALID_PIN to be used without FHSS.
     /// Caution: You must specify an interrupt capable pin.
+    /// \param[in] useFH enables FHSS. Defaults to False to disable FHSS. 
     /// On many Arduino boards, there are limitations as to which pins may be used as interrupts.
     /// On Leonardo pins 0, 1, 2 or 3. On Mega2560 pins 2, 3, 18, 19, 20, 21. On Due and Teensy, any digital pin.
     /// On Arduino Zero from arduino.cc, any digital pin other than 4.
@@ -633,7 +639,7 @@ public:
     /// On other boards, any digital pin may be used.
     /// \param[in] spi Pointer to the SPI interface object to use. 
     ///                Defaults to the standard Arduino hardware SPI interface
-    RH_RF95(uint8_t slaveSelectPin = SS, uint8_t interruptPin = 2, RHGenericSPI& spi = hardware_spi);
+    RH_RF95(uint8_t slaveSelectPin = SS, uint8_t interruptPin = 2, uint8_t chanHopIntPin = RH_INVALID_PIN, bool useFH = false, RHGenericSPI& spi = hardware_spi);
     
     /// Initialise the Driver transport hardware and software.
     /// Leaves the radio in idle mode,
@@ -710,6 +716,32 @@ public:
     /// different frequency ranges, and setting a frequency outside that range of your radio will probably not work
     /// \return true if the selected frquency centre is within range
     bool        setFrequency(float centre);
+
+    /// Sets the transmitter and receiver
+    /// frequency from the channel list
+    bool setChanFreq(uint8_t channel);
+
+    /// @brief Create Hop Channel List
+    /// @param centre Frequency in MHz. 137.0 to 1020.0. Caution: RFM95/96/97/98 comes in several
+    /// different frequency ranges, and setting a frequency outside that range of your radio will probably not work
+    /// @param bw Antennas usable bw in MHz to keep FHSS in.
+    /// @param hopChan The pointer to hop channel list.
+    void setFHlist(float centre, float bw, const uint8_t *hopChan);
+
+    /// FHSS
+    /// How does SX1276 chip hop the freq spectrum?
+    /// First, two SX1276 chips were given a same series of frequencies (freqList[]) in advance.
+    /// The sender is configured to be interrupted (IRQ) by 'TxDone' and 'FhssChangeChannel'
+    /// The receiver is configured to be interrupted by 'RxDone' and 'FhssChangeChannel'
+    /// After the chip spent enough (dwell) time on one frequency channel during Tx or Rx, 'FhssChangeChannel' IRQ is triggered.
+    /// New freq (next unused element in freqList[]) is set in the 'FhssChangeChannel' IRQ handler.
+    /// After enough channels are hopped, Tx/Rx is done and TxDone/RxDone is triggered.
+    /// Symbol duration: Tsym = 2^SF / BW
+    /// For example, if SF = 10, BW = 125kHz, then Tsym = 8.192ms
+    /// Given FCC permits a 400ms max dwell time per channel, we must hop at least every 48 symbols
+    /// HoppingPeriod (dwell time on each freq) = FreqHoppingPeriod * Tsym
+    bool setFH(uint8_t symbolPeriod = 2, bool useDio2 = true);
+
 
     /// If current mode is Rx or Tx changes it to Idle. If the transmitter or receiver is running, 
     /// disables them.
@@ -882,7 +914,7 @@ private:
     /// Low level interrupt service routine for device connected to interrupt 1
     static void         isr1();
 
-    /// Low level interrupt service routine for device connected to interrupt 1
+    /// Low level interrupt service routine for device connected to interrupt 2
     static void         isr2();
 
     /// Array of instances connected to interrupts 0 and 1
@@ -892,7 +924,22 @@ private:
     static uint8_t      _interruptCount;
 
     /// The configured interrupt pin connected to this instance
-    uint8_t             _interruptPin;
+    uint8_t             _dio0Pin;
+
+    /// The configured interrupt pin connected to this instance
+    uint8_t             _chanHopPin;   
+
+    /// True if the frequency hopping is not used
+    bool                _useFH;
+
+    /// mask to activete IRQ on DIO1 (0x) or DIO2 (0x04)
+    uint8_t             _dioFH;
+
+    /// Centre frequency
+    float               _centreFreq;
+    
+    ///Hop Channel Frequency list
+    uint32_t            _freqList[RH_RF95_MAX_FH_CHANNEL];
 
     /// The index into _deviceForInterrupt[] for this device (if an interrupt is already allocated)
     /// else 0xff
@@ -917,7 +964,7 @@ private:
     bool                _enableCRC;
 
     /// device ID
-    uint8_t		_deviceVersion = 0x00;
+    uint8_t		        _deviceVersion = 0x00;
     
 };
 

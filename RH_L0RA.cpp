@@ -1,7 +1,7 @@
 // RH_L0RA.cpp
 //
 // Copyright (C) 2020 Mike McCauley
-// $Id: RH_L0RA.cpp,v 1.1 2022/01/26 23:39:39 mikem Exp $
+// $Id: RH_L0RA.cpp,v 1.3 2023/03/26 11:45:39 ut2uh Exp $
 
 #if (RH_PLATFORM == RH_PLATFORM_STM32L0) && (defined (STM32L082xx) || defined (STM32L072xx) || defined (STM32L052xx))
 
@@ -34,14 +34,14 @@ static const stm32l0_spi_params_t RADIO_SPI_PARAMS = {
 static stm32l0_spi_t RADIO_SPI;
 SPIClass radio_spi(&RADIO_SPI, &RADIO_SPI_PARAMS);
 
-// Glue code between the 'C' DIO0 interrupt and the C++ interrupt handler in RH_RF95
+// Glue code between the 'C' DIO0 (and DIO2 for FHSS channel hop) interrupt and the C++ interrupt handler in RH_RF95
 void RH_INTERRUPT_ATTR RH_L0RA::isr()
 {
     _thisDevice->handleInterrupt();
 }
 
-RH_L0RA::RH_L0RA():
-    RH_RF95(RH_INVALID_PIN, RH_INVALID_PIN)
+RH_L0RA::RH_L0RA(bool useFH):
+    RH_RF95(RH_INVALID_PIN, RH_INVALID_PIN, RH_INVALID_PIN, useFH)
 {
 }
 
@@ -54,13 +54,15 @@ bool RH_L0RA::init()
     // The SX1276 radio DIO0 is connected to STM32L0xx pin RADIO_DIO_0
     // It will later be configured as an interrupt
     stm32l0_gpio_pin_configure(RADIO_DIO_0,     (STM32L0_GPIO_PARK_NONE | STM32L0_GPIO_PUPD_PULLDOWN | STM32L0_GPIO_OSPEED_HIGH | STM32L0_GPIO_OTYPE_PUSHPULL | STM32L0_GPIO_MODE_INPUT));
-
+    stm32l0_gpio_pin_configure(RADIO_DIO_2,     (STM32L0_GPIO_PARK_NONE | STM32L0_GPIO_PUPD_PULLDOWN | STM32L0_GPIO_OSPEED_HIGH | STM32L0_GPIO_OTYPE_PUSHPULL | STM32L0_GPIO_MODE_INPUT));
     // Here we configure the interrupt handler for DIO0 to call the C++
     // interrupt handler in RH_RF95, in a roundabout way
 #ifdef STM32L0_EXTI_CONTROL_PRIORITY_CRITICAL
     stm32l0_exti_attach(RADIO_DIO_0, (STM32L0_EXTI_CONTROL_PRIORITY_CRITICAL | STM32L0_EXTI_CONTROL_EDGE_RISING), (stm32l0_exti_callback_t)isr, NULL); // STM32L0_EXTI_CONTROL_PRIORITY_CRITICAL not in 0.0.10
+    stm32l0_exti_attach(RADIO_DIO_2, (STM32L0_EXTI_CONTROL_PRIORITY_CRITICAL | STM32L0_EXTI_CONTROL_EDGE_RISING), (stm32l0_exti_callback_t)isr, NULL); // STM32L0_EXTI_CONTROL_PRIORITY_CRITICAL not in 0.0.10
 #else
     stm32l0_exti_attach(RADIO_DIO_0, STM32L0_EXTI_CONTROL_EDGE_RISING, (stm32l0_exti_callback_t)isr, NULL);
+    stm32l0_exti_attach(RADIO_DIO_2, STM32L0_EXTI_CONTROL_EDGE_RISING, (stm32l0_exti_callback_t)isr, NULL);
 #endif
     // The SX1276 radio slave select (NSS) is connected to different STM32 pins in each module.
     // We use native STM32 calls because the various different variants in the Grumpy Pizza
@@ -101,6 +103,7 @@ bool RH_L0RA::deinit()
 {
     setModeIdle();
     stm32l0_exti_detach(RADIO_DIO_0);
+    stm32l0_exti_detach(RADIO_DIO_2);
     return true;
 }
 
