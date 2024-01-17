@@ -1,17 +1,17 @@
 // abz_client.pde
 // -*- mode: C++ -*-
 // Example sketch showing how to create a simple messageing client
-// with the RH_L0RA class. RH_L0RA class does not provide for addressing or
-// reliability, so you should only use RH_L0RA directly if you do not need the higher
+// with the RH_ABZ class. RH_ABZ class does not provide for addressing or
+// reliability, so you should only use RH_ABZ directly if you do not need the higher
 // level messaging abilities.
 // It is designed to work with the other example abz_server_xx
 // Tested with K33 custom board, Arduino 1.8.13, GrumpyOldPizza Arduino Core for STM32L0.
 
 #include <SPI.h>
-#include <RH_L0RA.h>
+#include <RH_ABZ.h>
 
 // Singleton instance of the radio driver
-RH_L0RA abz;
+RH_ABZ abz;
 
 
 void setup() 

@@ -1,7 +1,7 @@
 // abz_encrypted_server.pde
 // -*- mode: C++ -*-
 // Example sketch showing how to create an unreliable messageing server with encrypted communications,
-// using the RH_L0RA driver to control a SX1276 radio in Murata CMWX1ZZABZ module.
+// using the RH_ABZ driver to control a SX1276 radio in Murata CMWX1ZZABZ module.
 // In order for this to compile you MUST uncomment the #define RH_ENABLE_ENCRYPTION_MODULE line
 // at the bottom of RadioHead.h, AND you MUST have installed the Crypto directory from arduinolibs:
 // http://rweather.github.io/arduinolibs/index.html
@@ -11,12 +11,12 @@
 // Tested with K33 custom board, Arduino 1.8.13, GrumpyOldPizza Arduino Core for STM32L0.
 
 #include <SPI.h>
-#include <RH_L0RA.h>
+#include <RH_ABZ.h>
 #include <RHEncryptedDriver.h>
 #include <Speck.h>
 
 // Singleton instance of the radio driver
-RH_L0RA abz;
+RH_ABZ abz;
 Speck myCipher;   // Instanciate a Speck block ciphering
 RHEncryptedDriver myDriver(abz, myCipher); // Instantiate the driver with those two
 
@@ -68,7 +68,7 @@ void loop()
     {
        digitalWrite(PIN_LED_GRN, 1);
 
-//      RH_L0RA::printBuffer("request: ", buf, len);
+//      RH_ABZ::printBuffer("request: ", buf, len);
       Serial.print("got request: ");
       Serial.println((char*)buf);
 //      Serial.print("RSSI: ");

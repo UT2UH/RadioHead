@@ -8,11 +8,11 @@
 // Tested with K33 custom board, Arduino 1.8.13, GrumpyOldPizza Arduino Core for STM32L0.
 
 #include <SPI.h>
-#include <RH_L0RA.h>
+#include <RH_ABZ.h>
 #include <RHEncryptedDriver.h>
 #include <Speck.h>
 
-RH_L0RA abz;
+RH_ABZ abz;
 Speck myCipher;   // Instanciate a Speck block ciphering
 RHEncryptedDriver myDriver(abz, myCipher); // Instantiate the driver with those two
 
