@@ -1,17 +1,17 @@
-// abz_server.pde
+// stm32l0ra_server.pde
 // -*- mode: C++ -*-
 // Example sketch showing how to create a simple messageing server
-// with the RH_ABZ class. RH_ABZ class does not provide for addressing or
-// reliability, so you should only use RH_ABZ directly if you do not need the higher
+// with the RH_STM32L0RA class. RH_STM32L0RA class does not provide for addressing or
+// reliability, so you should only use RH_STM32L0RA directly if you do not need the higher
 // level messaging abilities.
-// It is designed to work with the other example abz_server
+// It is designed to work with the other example stm32l0ra_server
 // Tested with Tested with EcoNode SmartTrap, Arduino 1.8.9, GrumpyOldPizza Arduino Core for STM32L0.
 
 #include <SPI.h>
-#include <RH_ABZ.h>
+#include <RH_STM32L0RA.h>
 
 // Singleton instance of the radio driver
-RH_ABZ abz;
+RH_STM32L0RA stm32l0ra;
 
 // Valid for SmartTrap, maybe not other boards
 #define GREEN_LED 13
@@ -32,25 +32,25 @@ void setup()
 //  while (!Serial) ; 
 
   // You must be sure that the TCXO settings are appropriate for your board and radio.
-  // See the RH_ABZ documentation for more information.
+  // See the RH_STM32L0RA documentation for more information.
   // This call is adequate for Tlera boards supported by the Grumpy Old Pizza Arduino Core
   // It may or may not be innocuous for others
   SX1276SetBoardTcxo(true);
   delay(1);
 
-  if (!abz.init())
+  if (!stm32l0ra.init())
     Serial.println("init failed");  
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
 
-  abz.setFrequency(868.0);
+  stm32l0ra.setFrequency(868.0);
 
   // You can change the modulation speed etc from the default
-  //abz.setModemConfig(RH_RF95::Bw125Cr45Sf128);
-  //abz.setModemConfig(RH_RF95::Bw125Cr45Sf2048);
+  //stm32l0ra.setModemConfig(RH_RF95::Bw125Cr45Sf128);
+  //stm32l0ra.setModemConfig(RH_RF95::Bw125Cr45Sf2048);
 
   // The default transmitter power is 13dBm, using PA_BOOST.
   // You can set transmitter powers from 2 to 20 dBm:
-  //abz.setTxPower(20); // Max power
+  //stm32l0ra.setTxPower(20); // Max power
 
 }
 
@@ -60,25 +60,25 @@ void loop()
   digitalWrite(GREEN_LED, 0);
   digitalWrite(RED_LED, 0);
   
-  if (abz.available())
+  if (stm32l0ra.available())
   {
     // Should be a message for us now   
     uint8_t buf[RH_RF95_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
-    if (abz.recv(buf, &len))
+    if (stm32l0ra.recv(buf, &len))
     {
        digitalWrite(GREEN_LED, 1);
 
-//      RH_ABZ::printBuffer("request: ", buf, len);
+//      RH_STM32L0RA::printBuffer("request: ", buf, len);
       Serial.print("got request: ");
       Serial.println((char*)buf);
 //      Serial.print("RSSI: ");
-//      Serial.println(abz.lastRssi(), DEC);
+//      Serial.println(stm32l0ra.lastRssi(), DEC);
 
       // Send a reply
       uint8_t data[] = "And hello back to you";
-      abz.send(data, sizeof(data));
-      abz.waitPacketSent();
+      stm32l0ra.send(data, sizeof(data));
+      stm32l0ra.waitPacketSent();
       Serial.println("Sent a reply");
       digitalWrite(GREEN_LED, 0);
     }

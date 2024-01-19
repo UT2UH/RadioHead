@@ -128,7 +128,7 @@ Works with a range of inexpensive ASK (amplitude shift keying) RF transceivers s
 (also known as ST-RX04-ASK) receiver; TX-C1 transmitter and DR3100 transceiver; FS1000A/XY-MK-5V transceiver;
 HopeRF RFM83C / RFM85. Supports ASK (OOK).
 
-- RH_ABZ
+- RH_STM32L0RA
 Works with EcoNode SmartTrap, Tlera Grasshopper and family. Almost any board equipped with a muRata cmwx1zzabz module
 should work. Tested with EcoNode SmartTrap, Arduino 1.8.9, GrumpyOldPizza Arduino Core for STM32L0.
 When building for EcoNode SmartTrap in Arduino IDE, select board type Grasshopper-L082CZ.
@@ -1042,25 +1042,25 @@ k             Fix SPI bus speed errors on 8MHz Arduinos.
 	     Checked operation and improved documentation. Valid settings are:
 	     2 to 20 (useRFO false) and 0 to 15 (useRFO true). 18, 19 and 20 (useRFO false) turn on the PA_DAC.
 	     Fixed RF95 examples to reflect correct use.
-	     Added RH_ABZ driver, which supports the muRata CMWX1ZZABZ (TypeABZ) module
+	     Added RH_STM32L0RA driver, which supports the muRata CMWX1ZZABZ (TypeABZ) module
 	     which includes an STM32L0 processor, a SX1276 LoRa radio and an antenna switch. 
 	     Requires the Grumpy Old Pizza Arduino Core installed per https://github.com/GrumpyOldPizza/ArduinoCore-stm32l0
 	     Examples provided.
 
 \version 1.104 2020-06-08
-             Fixed a problem with new RH_ABZ module that prevents compilation with standard 0.0.10 version of STM32L0 <br>
+             Fixed a problem with new RH_STM32L0RA module that prevents compilation with standard 0.0.10 version of STM32L0 <br>
 	     Arduino Core installed with Board Manager: STM32L0_EXTI_CONTROL_PRIORITY_CRITICAL 
 	     is only available in later versions.<br>
 
 \version 1.105 2020-06-03
-             Added support for RH_ABZ on STM32L072xx on Grumpy Old Pizza Arduino Core<br>
+             Added support for RH_STM32L0RA on STM32L072xx on Grumpy Old Pizza Arduino Core<br>
 
 \version 1.106 2020-06-16
              Patch from	Livio Tenze for RH_RF22 to fix a problem with interrupts on on ESP8266.<br>
 	     Added examples/rf22/rf22_cw, with example showing how to emit a carrier wave (CW).<br>
 	     Reverted delay in RHSPIDriver::init() back to 100ms for all platforms except ABZ, where
 	     100ms interferes with the USB serial port with at least some versions of the core.<br>
-	     Updated and clarified documentation about TCXO use in RH_ABZ and examples.<br>
+	     Updated and clarified documentation about TCXO use in RH_STM32L0RA and examples.<br>
 	     Fixed documentation SS->NSEL pin for RH_RF22 with AtMega. Seems that SS on that platform
 	     is now defined as pin 10, not 53. Dont know when that changed.<br>
 
@@ -1101,7 +1101,7 @@ k             Fix SPI bus speed errors on 8MHz Arduinos.
 	     where TCB1 is not available.<br>
 	     Minor imprvements to documentation.<br>
 	     Move to local git for source code control.<br>
-	     Added support for RH_ABZ::deinit() for Matt Way.
+	     Added support for RH_STM32L0RA::deinit() for Matt Way.
 	     Fixed compilation error in RH_ASK caused by changes to interrupt API in Arduino_Core_STM32 1.9
 
 \version 1.114 2021-03-24
@@ -1975,7 +1975,7 @@ these examples and explanations and extend them to suit your needs.
 // Uncomment this is to enable Encryption (see RHEncryptedDriver):
 // But ensure you have installed the Crypto directory from arduinolibs first:
 // http://rweather.github.io/arduinolibs/index.html
-//#define RH_ENABLE_ENCRYPTION_MODULE
+#define RH_ENABLE_ENCRYPTION_MODULE
 
 // Some platforms like RocketScream need this to see debug Serial output from within RH
 // and if it goes to Serial, get a hang after a few minutes.

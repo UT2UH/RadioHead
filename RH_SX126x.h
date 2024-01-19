@@ -767,6 +767,11 @@ public:
 	LoRa_Bw31_25Cr48Sf512,	   ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
 	LoRa_Bw125Cr48Sf4096,      ///< Bw = 125 kHz, Cr = 4/8, Sf = 4096chips/symbol, low data rate, CRC on. Slow+long range
 	LoRa_Bw125Cr45Sf2048,      ///< Bw = 125 kHz, Cr = 4/5, Sf = 2048chips/symbol, CRC on. Slow+long range
+    LoRa_Bw125Cr48Sf512,       /// AGC enabled (SF 9)  312.32ms
+    LoRa_Bw125Cr48Sf1024,      /// AGC enabled (SF 10) 559.1ms
+    LoRa_Bw125Cr47Sf1024,      /// AGC enabled (SF 10) 509.95ms
+    LoRa_Bw125Cr46Sf1024,      /// AGC enabled (SF 10) 460.8ms
+    LoRa_Bw31_25Cr46Sf256,	   ///< Bw = 31.25 kHz, Cr = 4/6, Sf = 256chips/symbol, CRC on.
     } ModemConfigChoice;
 
     /// Structures and enums for Tx/Rx pin configuration
@@ -783,7 +788,7 @@ public:
 	RadioPinConfigMode_TX_HIGH_POWER,   // This config is for transmitting with high power PA
     } RadioPinConfigMode;
     
-    // Maximum bumber of entries permitted in a RadioPinConfigTable
+    // Maximum number of entries permitted in a RadioPinConfigTable
     #define RH_SX126x_MAX_RADIO_PIN_CONFIG_MODES (RadioPinConfigMode_TX_HIGH_POWER + 1)
 
     // The number of pins that might need to be controlled
@@ -830,7 +835,7 @@ public:
     /// \param[in] radioPinConfig pinter to a strucure that describes what pins are to be automatically set when changing
     /// the radio mode. This can be used to configure any external RF switches, RF amplifiers etc.
     ///                Defaults to the standard Arduino hardware SPI interface
-    RH_SX126x(uint8_t slaveSelectPin = SS, uint8_t interruptPin = 2, RHGenericSPI& spi = hardware_spi, RadioPinConfig* radioPinConfig = nullptr);
+    RH_SX126x(uint8_t slaveSelectPin = SS, uint8_t interruptPin = 2, float tcxoVoltage = 0.0, bool useDcDc = true, bool xtal = false, RHGenericSPI& spi = hardware_spi, RadioPinConfig* radioPinConfig = nullptr);
     
     /// Initialise the Driver transport hardware and software.
     /// Leaves the radio in idle mode,
@@ -935,7 +940,7 @@ public:
     /// For STM32WLx with high power PA configured by radioPinConfig, same as SX1262.
     /// \return true if successful. Returns false if radioPinConfig has not been properly
     /// configured for the requested power setting
-    virtual bool           setTxPower(int8_t power);
+    virtual bool           setTxPower(int8_t power, bool sx126x = true);
 
     /// Sets the radio into low-power sleep mode.
     /// If successful, the transport will stay in sleep mode until woken by 
@@ -966,6 +971,14 @@ public:
     /// CAUTION: use this only for testing in controlled conditions with a dummy load. It may be illegal for you to transmit
     /// a continuous carrier wave to air.
     bool setTxContinuous();
+
+    /// Set the voltage to use for the TCXO oven
+    bool setTCXO(float voltage, uint32_t delay);
+
+    /// Sets whether DIO2 is to be used to automatically control an external radio RF switch.
+    /// Normall you should use the pinConfig in the constructor or setRadioPinConfig() to automatically control any
+    /// radio control pins
+    bool setDIO2AsRfSwitchCtrl(bool value);
     
 protected:
 
@@ -1024,11 +1037,6 @@ protected:
     /// Clear the radio error byte
     bool clearDeviceErrors();
 
-    /// Sets whether DIO2 is to be used to automatically control an external radio RF switch.
-    /// Normall you should use the pinConfig in the constructor or setRadioPinConfig() to automatically control any
-    /// radio control pins
-    bool setDIO2AsRfSwitchCtrl(bool value);
-
     /// Sets the mode that the radio will change to after a transmit or receive is complete
     bool setRxFallbackMode(uint8_t mode);
 
@@ -1056,9 +1064,6 @@ protected:
     /// Configures the radio to use an external temperature controlled crystal oscillator (TCXO) and the oven voltage to use.
     /// For low level internal use only
     bool setDIO3AsTcxoCtrl(uint8_t voltage, uint32_t delay);
-
-    /// Set the voltage to use for the TCXO oven
-    bool setTCXO(float voltage, uint32_t delay);
 
     /// Low level function to set the radio packet confiuration
     bool setPacketParams(uint8_t p1, uint8_t p2, uint8_t p3, uint8_t p4, uint8_t p5, uint8_t p6, uint8_t p7, uint8_t p8, uint8_t p9);
@@ -1153,6 +1158,15 @@ private:
 
     /// The configured interrupt pin connected to this instance
     uint8_t             _interruptPin;
+
+    /// The configured TCXO voltage
+    float               _tcxoVoltage;
+    
+    /// The configured LDO/DC-DC selector
+    bool                _useDcDc;
+
+    /// Set XTAL instead of TCXO 
+    bool                _xtal;
 
     /// The index into _deviceForInterrupt[] for this device (if an interrupt is already allocated)
     /// else 0xff

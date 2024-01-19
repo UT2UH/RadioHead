@@ -37,14 +37,32 @@ PROGMEM static const RH_SX126x::ModemConfig MODEM_CONFIG_TABLE[] =
     
     // LoRa_Bw125Cr45Sf2048 Works with RH_RF95
     { RH_SX126x::PacketTypeLoRa, RH_SX126x_LORA_SF_2048, RH_SX126x_LORA_BW_125_0, RH_SX126x_LORA_CR_4_5, RH_SX126x_LORA_LOW_DATA_RATE_OPTIMIZE_ON, 0, 0, 0, 0},
+
+    // LoRa_Bw125Cr48Sf512,       /// AGC enabled (SF 9)  312.32ms
+    { RH_SX126x::PacketTypeLoRa, RH_SX126x_LORA_SF_512, RH_SX126x_LORA_BW_125_0, RH_SX126x_LORA_CR_4_8, RH_SX126x_LORA_LOW_DATA_RATE_OPTIMIZE_ON, 0, 0, 0, 0},
+
+    // LoRa_Bw125Cr48Sf1024,      /// AGC enabled (SF 10) 559.1ms
+    { RH_SX126x::PacketTypeLoRa, RH_SX126x_LORA_SF_1024, RH_SX126x_LORA_BW_125_0, RH_SX126x_LORA_CR_4_8, RH_SX126x_LORA_LOW_DATA_RATE_OPTIMIZE_ON, 0, 0, 0, 0},
+
+    // LoRa_Bw125Cr47Sf1024,      /// AGC enabled (SF 10) 509.95ms
+    { RH_SX126x::PacketTypeLoRa, RH_SX126x_LORA_SF_1024, RH_SX126x_LORA_BW_125_0, RH_SX126x_LORA_CR_4_7, RH_SX126x_LORA_LOW_DATA_RATE_OPTIMIZE_ON, 0, 0, 0, 0},
+
+    // LoRa_Bw125Cr46Sf1024,      /// AGC enabled (SF 10) 460.8ms
+    { RH_SX126x::PacketTypeLoRa, RH_SX126x_LORA_SF_1024, RH_SX126x_LORA_BW_125_0, RH_SX126x_LORA_CR_4_6, RH_SX126x_LORA_LOW_DATA_RATE_OPTIMIZE_ON, 0, 0, 0, 0},
+
+    // LoRa_Bw31_25Cr46Sf256,	   ///< Bw = 31.25 kHz, Cr = 4/6, Sf = 256chips/symbol, CRC on.
+    { RH_SX126x::PacketTypeLoRa, RH_SX126x_LORA_SF_256, RH_SX126x_LORA_BW_31_25, RH_SX126x_LORA_CR_4_6, RH_SX126x_LORA_LOW_DATA_RATE_OPTIMIZE_ON, 0, 0, 0, 0},
 };
 
-RH_SX126x::RH_SX126x(uint8_t slaveSelectPin, uint8_t interruptPin, RHGenericSPI& spi, RadioPinConfig* radioPinConfig)
+RH_SX126x::RH_SX126x(uint8_t slaveSelectPin, uint8_t interruptPin, float tcxoVoltage /* = 0.0 */, bool useDcDc /* = true */, bool xtal /* = false */, RHGenericSPI& spi, RadioPinConfig* radioPinConfig)
     :
     RHSPIDriver(slaveSelectPin, spi),
     _rxBufValid(0)
 {
     _interruptPin = interruptPin;
+    _tcxoVoltage = tcxoVoltage;
+    _useDcDc = useDcDc;
+    _xtal = xtal;
     _myInterruptIndex = 0xff; // Not allocated yet
     _enableCRC = true;
     // There should be (but may not be) a configuration structure toi tell us how to manage the
@@ -79,15 +97,21 @@ bool RH_SX126x::init()
         return false;
 
     setModeIdle();
-    setRegulatorMode(RH_SX126x_REGULATOR_DC_DC); // == SMPS mode
+      // set TCXO control, if requested
+    if(!_xtal && _tcxoVoltage > 0.0)
+        setTCXO(_tcxoVoltage, 5000);
+    if(_useDcDc)
+        setRegulatorMode(RH_SX126x_REGULATOR_DC_DC); // == SMPS mode
+    else
+        setRegulatorMode(RH_SX126x_REGULATOR_LDO); // == LDO
     clearDeviceErrors();
     setRxFallbackMode(RH_SX126x_RX_TX_FALLBACK_MODE_STDBY_RC);
     calibrate(RH_SX126x_CALIBRATE_ALL); // All blocks get (re)calibrated when setFrequency() is called with calibrate true
     // This LoRa Sync word 0x1424 is compatible with single byte 0x12 default for RH_RF95.
     // https://forum.lora-developers.semtech.com/t/sx1272-and-sx1262-lora-sync-word-compatibility/988/13
-    setLoRaSyncWord(0x1424); 
+
     setDIO2AsRfSwitchCtrl(false); // Dont use DIO2 as RF control for Wio-E5, which uses separate pins
-    setTCXO(1.7, 5000); // MUST do this (in standby mode) else get no output. volts, us
+
     // These are the interrupts we are willing to pocess
     uint16_t interrupts =
 	  RH_SX126x_IRQ_CAD_DETECTED
@@ -98,14 +122,16 @@ bool RH_SX126x::init()
 	| RH_SX126x_IRQ_TX_DONE;
     setDioIrqParams(interrupts, interrupts, RH_SX126x_IRQ_NONE, RH_SX126x_IRQ_NONE);
 
+    setLoRaSyncWord(0x1424); 
     // Set up default configuration
     setModemConfig(LoRa_Bw125Cr45Sf128); // Radio default
 //    setModemConfig(LoRa_Bw125Cr48Sf4096); // slow and reliable?
     // Default preamble length is 8, so dont set it here
     // An innocuous ISM frequency, in the HF range for the WiO-E5, compatible with RH_RF95
-    setFrequency(915.0);
+    //setFrequency(915.0);
+    setFrequency(320.3);
     // Lowish power
-    setTxPower(13);
+    setTxPower(12);
     
     return true;
 }
@@ -113,7 +139,7 @@ bool RH_SX126x::init()
 // Some subclasses may need to override
 bool RH_SX126x::setupInterruptHandler()
 {
-    // For some subclasses (eg RH_ABZ)  we dont want to set up interrupt
+    // For some subclasses (eg RH_STM32L0RA)  we dont want to set up interrupt
     int interruptNumber = NOT_AN_INTERRUPT;
     if (_interruptPin != RH_INVALID_PIN)
     {
@@ -662,7 +688,7 @@ bool RH_SX126x::setTxParams(uint8_t power, uint8_t rampTime)
     return sendCommand(RH_SX126x_CMD_SET_TX_PARAMS, settings, sizeof(settings));
 }
 
-bool RH_SX126x::setTxPower(int8_t power)
+bool RH_SX126x::setTxPower(int8_t power, bool sx126x /* = true */)
 {
     // The device may have 2 transmitter power amps (PAs), low power and high power
     // However, depending on the specific model and how it is connected, one or the other might not be available

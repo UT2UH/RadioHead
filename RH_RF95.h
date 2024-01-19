@@ -603,11 +603,15 @@ public:
     /// is in use. See the Semtech SX1276/77/78 Errata Note. These are not implemented by RH_RF95.
     typedef enum
     {
-	Bw125Cr45Sf128 = 0,	   ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
-	Bw500Cr45Sf128,	           ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
-	Bw31_25Cr48Sf512,	   ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
-	Bw125Cr48Sf4096,           ///< Bw = 125 kHz, Cr = 4/8, Sf = 4096chips/symbol, low data rate, CRC on. Slow+long range
-	Bw125Cr45Sf2048,           ///< Bw = 125 kHz, Cr = 4/5, Sf = 2048chips/symbol, CRC on. Slow+long range
+	Bw125Cr45Sf128 = 0,     ///< Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Default medium range
+	Bw500Cr45Sf128,         ///< Bw = 500 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on. Fast+short range
+	Bw31_25Cr48Sf512,       ///< Bw = 31.25 kHz, Cr = 4/8, Sf = 512chips/symbol, CRC on. Slow+long range
+	Bw125Cr48Sf4096,        ///< Bw = 125 kHz, Cr = 4/8, Sf = 4096chips/symbol, low data rate, CRC on. Slow+long range
+	Bw125Cr45Sf2048,        ///< Bw = 125 kHz, Cr = 4/5, Sf = 2048chips/symbol, CRC on. Slow+long range
+    Bw125Cr48Sf512,         /// AGC enabled (SF 9)  312.32ms
+    Bw125Cr48Sf1024,        /// AGC enabled (SF 10) 559.1ms
+    Bw125Cr47Sf1024,        /// AGC enabled (SF 10) 509.95ms
+    Bw125Cr46Sf1024,        /// AGC enabled (SF 10) 460.8ms
     } ModemConfigChoice;
 
     /// Constructor. You can have multiple instances, but each instance must have its own

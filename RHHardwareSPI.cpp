@@ -24,7 +24,7 @@ HardwareSPI SPI(1);
 #elif (RH_PLATFORM == RH_PLATFORM_MONGOOSE_OS) // Mongoose OS platform
 HardwareSPI SPI(1);
 #elif (RH_PLATFORM == RH_PLATFORM_STM32L0) && (defined STM32L082xx || defined STM32L072xx)
- extern SPIClass radio_spi; // Created in RH_ABZ.cpp
+ extern SPIClass radio_spi; // Created in RH_STM32L0RA.cpp
  #define SPI radio_spi
 #elif (RH_PLATFORM == RH_PLATFORM_ESP32 && defined(RH_ESP32_USE_HSPI))
  SPIClass SPI_HSPI(HSPI);
